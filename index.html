@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>...</title>
     <style>
         body, html {
@@ -13,6 +13,9 @@
             overflow: hidden;
             background-color: #000000;
             cursor: none;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
         }
 
         canvas {
@@ -32,7 +35,7 @@
             pointer-events: none;
             z-index: 1000;
             transform: translate(-50%, -50%);
-            transition: width 0.2s, height 0.2s, background-color 0.2s;
+            transition: width 0.2s, height 0.2s, background-color 0.2s, border-color 0.3s, box-shadow 0.3s;
             box-shadow: 0 0 10px rgba(150, 150, 150, 0.5);
             animation: pulseCursor 2s infinite ease-in-out;
         }
@@ -47,6 +50,16 @@
             background-color: rgba(220, 220, 220, 0.9);
             border-radius: 50%;
             transform: translate(-50%, -50%);
+            transition: background-color 0.3s;
+        }
+
+        .custom-cursor.pink-mode {
+            border-color: rgba(255, 105, 180, 0.9);
+            box-shadow: 0 0 15px rgba(255, 20, 147, 0.8);
+        }
+
+        .custom-cursor.pink-mode::after {
+            background-color: rgba(255, 105, 180, 1);
         }
 
         @keyframes pulseCursor {
@@ -134,7 +147,7 @@
         }
     </style>
 </head>
-<body>
+<body oncontextmenu="return false;">
 
     <div class="custom-cursor" id="customCursor"></div>
     <div class="dreamcore-text" id="dreamcoreText">魩𖤠𓍯𓀧啥陳驦鴠𓁥啥𓉩ꔠ陥𓅮𖤠𓍯𓀧啥𒁮啴𐙩𓈠驨鱩鉨𒄠陬驣</div>
@@ -149,6 +162,20 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
     <script>
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J' || e.key === 'C')) || (e.ctrlKey && e.key === 'U')) {
+                e.preventDefault();
+                return false;
+            }
+        });
+
+        document.addEventListener('wheel', (e) => {
+            if (e.ctrlKey) e.preventDefault();
+        }, { passive: false });
+        document.addEventListener('gesturestart', (e) => e.preventDefault());
+        document.addEventListener('gesturechange', (e) => e.preventDefault());
+        document.addEventListener('gestureend', (e) => e.preventDefault());
+
         let appStarted = false;
 
         const cursorEl = document.getElementById('customCursor');
@@ -279,17 +306,54 @@
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
 
-        window.addEventListener('click', (event) => {
-            if (appStarted) return;
+        let clickCount = 0;
+        const vantaMatBlack = new THREE.MeshBasicMaterial({ color: 0x000000 });
+        const vantaMatWhite = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        let currentVantaMat = vantaMatBlack;
 
+        function updateDarknessAndSound() {
+            // Assombrit progressivement la scene de base (fog & background / éclairage)
+            const factor = Math.max(0.1, 1.0 - (clickCount * 0.18));
+            document.body.style.filter = `brightness(${factor})`;
+
+            const breathSound = document.getElementById('breathSound');
+            if (breathSound) {
+                breathSound.playbackRate = 1.0 + (clickCount * 0.25);
+                breathSound.volume = Math.min(1.0, 0.4 + (clickCount * 0.15));
+            }
+
+            if (clickCount >= 5) {
+                currentVantaMat.color.setHex(0xffffff);
+                if (window.vantaGroupRef) {
+                    window.vantaGroupRef.traverse(child => {
+                        if (child.isMesh) child.material = vantaMatWhite;
+                    });
+                }
+                setTimeout(() => {
+                    window.location.href = "https://hamzabelaid92140-netizen.github.io/behind-my-dream/";
+                }, 400);
+            }
+        }
+
+        window.addEventListener('click', (event) => {
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
             raycaster.setFromCamera(mouse, camera);
 
-            const intersects = raycaster.intersectObject(menuEye);
-            if (intersects.length > 0) {
-                cursorEl.style.display = 'none';
-                triggerMenuExplosion();
+            if (!appStarted) {
+                const intersects = raycaster.intersectObject(menuEye);
+                if (intersects.length > 0) {
+                    triggerMenuExplosion();
+                }
+                return;
+            }
+
+            if (window.vantaGroupRef && window.vantaGroupRef.visible) {
+                const intersects = raycaster.intersectObjects(window.vantaGroupRef.children, true);
+                if (intersects.length > 0 && clickCount < 5) {
+                    clickCount++;
+                    updateDarknessAndSound();
+                }
             }
         });
 
@@ -307,6 +371,8 @@
 
         function initDreamcoreZone() {
             appStarted = true;
+            cursorEl.style.display = 'block';
+            cursorEl.classList.add('pink-mode');
             scene.background = new THREE.Color(0xffbfe3);
             scene.fog = new THREE.FogExp2(0xffbfe3, 0.009);
 
@@ -319,7 +385,7 @@
             const breathSound = document.getElementById('breathSound');
             bgMusic.volume = 0.5;
             bgMusic.play().catch(e => console.log(e));
-            breathSound.volume = 1.0; 
+            breathSound.volume = 0.4; 
             breathSound.play().catch(e => console.log(e));
 
             const ambientLight = new THREE.AmbientLight(0xffd6ec, 1.8);
@@ -494,40 +560,39 @@
             scene.add(crossGroup);
 
             const vantaGroup = new THREE.Group();
-            const vantaMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
             
             const vantaBodyGeo = new THREE.CylinderGeometry(0.6, 1.2, 14, 16);
-            const vantaBody = new THREE.Mesh(vantaBodyGeo, vantaMat);
+            const vantaBody = new THREE.Mesh(vantaBodyGeo, currentVantaMat);
             vantaBody.position.y = 7;
             vantaGroup.add(vantaBody);
 
             const vantaHeadGeo = new THREE.SphereGeometry(1.6, 24, 24);
             vantaHeadGeo.scale(0.8, 1.5, 0.9);
-            const vantaHead = new THREE.Mesh(vantaHeadGeo, vantaMat);
+            const vantaHead = new THREE.Mesh(vantaHeadGeo, currentVantaMat);
             vantaHead.position.y = 15.5;
             vantaGroup.add(vantaHead);
 
             const shoulderGeo = new THREE.BoxGeometry(5.2, 0.8, 1.2);
-            const shoulder = new THREE.Mesh(shoulderGeo, vantaMat);
+            const shoulder = new THREE.Mesh(shoulderGeo, currentVantaMat);
             shoulder.position.y = 13.8;
             vantaGroup.add(shoulder);
 
             const armGeo = new THREE.CylinderGeometry(0.35, 0.15, 14, 12);
             
-            const leftArm = new THREE.Mesh(armGeo, vantaMat);
+            const leftArm = new THREE.Mesh(armGeo, currentVantaMat);
             leftArm.position.set(-2.5, 7.5, 0);
             vantaGroup.add(leftArm);
 
-            const rightArm = new THREE.Mesh(armGeo, vantaMat);
+            const rightArm = new THREE.Mesh(armGeo, currentVantaMat);
             rightArm.position.set(2.5, 7.5, 0);
             vantaGroup.add(rightArm);
 
             const legGeo = new THREE.CylinderGeometry(0.4, 0.1, 12, 12);
-            const leftLeg = new THREE.Mesh(legGeo, vantaMat);
+            const leftLeg = new THREE.Mesh(legGeo, currentVantaMat);
             leftLeg.position.set(-0.8, -1, 0);
             vantaGroup.add(leftLeg);
 
-            const rightLeg = new THREE.Mesh(legGeo, vantaMat);
+            const rightLeg = new THREE.Mesh(legGeo, currentVantaMat);
             rightLeg.position.set(0.8, -1, 0);
             vantaGroup.add(rightLeg);
 
